@@ -95,6 +95,12 @@ if [ "$UNITIGS" = true ]; then
     type=unitig
 fi
 
+
+# QUERY_FILE base name without extension
+# Remove all extensions from QUERY_FILE to get the base name
+QUERY_BASENAME=$(basename "$QUERY_FILE")
+QUERY_BASENAME="${QUERY_BASENAME%%.*}"
+
 counter=0
 while read accession; do
     if [ "$LIMIT" -ne 0 ] && [ "$counter" -ge "$LIMIT" ]; then
@@ -139,13 +145,15 @@ while read accession; do
     fi
 
 	echo "\033[0;33mAligning recruited sequences from ${accession}.${type}s.fa.zst with ${QUERY_FILE}...\033[0m"
-	echo "\033[0;32mpython local_blast.py --target ${QUERY_FILE} --query ${accession}.recruited_${type}s.fa \033[0m"
-	python local_blast.py --target ${QUERY_FILE} --query ${accession}.recruited_${type}s.fa
+	echo "\033[0;32mpython3 local_blast.py --target ${QUERY_FILE} --query ${accession}.recruited_${type}s.fa \033[0m"
+	python3 local_blast.py --target ${QUERY_FILE} --query ${accession}.recruited_${type}s.fa
     if [ "$DELETE" = true ]; then
         echo "\033[0;33mDeleting ${accession}.recruited_${type}s.fa and ${accession}.${type}s.fa.zst...\033[0m"
         rm -f ${accession}.recruited_${type}s.fa
         rm -f ${accession}.${type}s.fa.zst
     fi
+    # Clean the blast db files
+    rm -f ${accession}.recruited_${type}s_vs_${QUERY_BASENAME}/targets_db*
 done < ${ACCESSION_FILE}
 
 echo
@@ -159,9 +167,5 @@ if [ "$DELETE" = false ]; then
     echo "\033[0;32mrm -f *.recruited_${type}s.fa *.${type}s.fa.zst\033[0m"
 fi
 
-# QUERY_FILE base name without extension
-# Remove all extensions from QUERY_FILE to get the base name
-QUERY_BASENAME=$(basename "$QUERY_FILE")
-QUERY_BASENAME="${QUERY_BASENAME%%.*}"
 echo
 echo "\033[0;33mResults can be found in directories <accessions>.recruited_${type}s_vs_${QUERY_BASENAME} for each accession id in the ${ACCESSION_FILE}.\033[0m"

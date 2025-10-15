@@ -21,16 +21,11 @@ def run_blast_with_alignments(query_fasta, targets_fasta, output_dir="blast_resu
         "-out", os.path.join(output_dir, "targets_db")
     ]
     result = subprocess.run(makeblastdb_cmd, check=True, capture_output=True, text=True)
-
-    # Optionally, print or log the output/errors
-    # if result.stdout:
-    #     print("STDOUT:", result.stdout)
-    # if result.stderr:
-    #     print("STDERR:", result.stderr)
-
+    
     # Run BLAST for each target and save alignments
     for target_record in SeqIO.parse(targets_fasta, "fasta"):
         target_id = target_record.id
+
         output_file = os.path.join(output_dir, f"{query_id}_vs_{target_id}.txt")
 
         # Define your command as a list of arguments
