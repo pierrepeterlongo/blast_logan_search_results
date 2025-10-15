@@ -9,8 +9,8 @@ For each accession, it will run local blast between the query and the subset of 
 
 ## Installation 
 - biopython: `pip3 install biopython`
-- blast (*eg* brew install blast or look at https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/)
-- back_to_sequences 
+- blast (*eg* `brew install blast` or look at [blast installation web page](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/)
+- back_to_sequences: see [back_to_sequences installation web page](https://b2s-doc.readthedocs.io/en/latest/usage.html#installation])
 
 ## Running the script
 
