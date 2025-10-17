@@ -7,12 +7,19 @@ DELETE=false
 UNITIGS=false
 LIMIT=0
 KMER_SIZE=17
+MAIN_DIR_NAME=""
+LOGAN_DIR_NAME="logan_data"
+ALIGNEMENT_DIR_NAME="alignments"
+INPUT_DATA_DIR_NAME="input_data"
+
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
-BLUE='\033[0;034m'
+BLUE='\033[1;034m'
+CYAN='\033[1;36m'
 NOCOLOR='\033[0m'
+
 
 print_help() {
     echo -e "Usage: $0 --session <logan seesion ID> or (--query <query_file.fa> --accessions <accessions.txt>) [--delete] [--kmer-size <k>] [--limit <n>]"
@@ -42,33 +49,24 @@ run_blast() {
     local TARGET_BASENAME
     QUERY_BASENAME=$(basename "${QUERY_FASTA%.*}")
     TARGET_BASENAME=$(basename "${TARGET_FASTA%.*}")
-    local OUTPUT_DIR="${QUERY_BASENAME}_vs_${TARGET_BASENAME}"
-
-    mkdir -p "$OUTPUT_DIR"
-
-    echo -e "[INFO] Creating BLAST database from ${TARGET_FASTA}..."
-    makeblastdb -dbtype nucl -in "$TARGET_FASTA" -out "${OUTPUT_DIR}/targets_db" >/dev/null 2>&1
-
     local QUERY_ID
     QUERY_ID=$(grep -m1 '^>' "$QUERY_FASTA" | sed 's/^>//;s/ .*//')
+    local OUTPUT_NAME="${QUERY_ID}_vs_${TARGET_BASENAME}.txt"
 
-    echo -e "[INFO] Running BLAST for each target sequence..."
 
-    grep '^>' "$TARGET_FASTA" | sed 's/^>//;s/ .*//' | while read -r TARGET_ID; do
-        [[ -z "$TARGET_ID" ]] && continue
-        local OUTPUT_FILE="${OUTPUT_DIR}/${QUERY_ID}_vs_${TARGET_ID}.txt"
+    echo -e "${YELLOW}[INFO] Creating BLAST database from ${TARGET_FASTA}...${NOCOLOR}"
+    echo -e "${GREEN}makeblastdb -dbtype nucl -in \"${TARGET_FASTA}\" -out \"targets_db\"${NOCOLOR}"
+    makeblastdb -dbtype nucl -in "$TARGET_FASTA" -out "targets_db" >/dev/null 2>&1
 
-        echo -e "  - Aligning ${QUERY_ID} vs ${TARGET_ID}..."
-        blastn \
-            -query "$QUERY_FASTA" \
-            -db "${OUTPUT_DIR}/targets_db" \
-            -out "$OUTPUT_FILE" \
-            -outfmt 0 \
-            -num_alignments 1 \
-            -sorthits 0 >/dev/null 2>&1
-    done
-
-    echo -e "\033[92m[INFO] Results are in directory ${OUTPUT_DIR}${NOCOLOR}"
+    echo -e "${YELLOW}[INFO] Aligning ${TARGET_BASENAME} vs ${QUERY_BASENAME}...${NOCOLOR}"
+    echo -e "${GREEN}blastn -query \"${QUERY_FASTA}\" -db \"targets_db\" -out \"${OUTPUT_NAME}\" -outfmt 0 -sorthits 0${NOCOLOR}"
+    blastn \
+        -query "${QUERY_FASTA}" \
+        -db "targets_db" \
+        -out "${ALIGNEMENT_DIR_NAME}/${OUTPUT_NAME}" \
+        -outfmt 0 \
+        -sorthits 0 >/dev/null 2>&1
+    rm -f targets_db*
 }
 
 while [[ $# -gt 0 ]]; do
@@ -112,7 +110,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
 # If session option was provided, do not allow accessions or query options
 if [[ -n "$SESSION_ID" && ( -n "$ACCESSION_FILE" || -n "$QUERY_FILE" ) ]]; then
     echo -e "${RED}Error: --session (-s) cannot be combined with --accessions (-a) or --query (-q).${NOCOLOR}"
@@ -120,16 +117,51 @@ if [[ -n "$SESSION_ID" && ( -n "$ACCESSION_FILE" || -n "$QUERY_FILE" ) ]]; then
     exit 1
 fi
 
+# Define the working directory based on session ID or query file
 if [[ -n "$SESSION_ID" ]]; then
+    MAIN_DIR_NAME="session_${SESSION_ID}"
+    mkdir "$MAIN_DIR_NAME" 
+    cd "$MAIN_DIR_NAME" || exit 1
+else
+    # We have a query file.
+
+    QUERY_BASENAME=$(basename "${QUERY_FILE%.*}")
+    # We find the first ID such that ${QUERY_BASENAME}_${ID} is not existing
+    for i in $(seq 1 1000); do
+        MAIN_DIR_NAME="${QUERY_BASENAME}_${i}"
+        if [ ! -d "$MAIN_DIR_NAME" ]; then
+            mkdir "$MAIN_DIR_NAME" 
+            cd "$MAIN_DIR_NAME" || exit 1
+            mkdir ${INPUT_DATA_DIR_NAME}
+            cp "../${QUERY_FILE}" ${INPUT_DATA_DIR_NAME}
+            cp "../${ACCESSION_FILE}" ${INPUT_DATA_DIR_NAME}
+            QUERY_FILE=${INPUT_DATA_DIR_NAME}/$(basename "${QUERY_FILE}")
+            ACCESSION_FILE=${INPUT_DATA_DIR_NAME}/$(basename "${ACCESSION_FILE}")
+            break
+        fi
+    done
+fi
+mkdir ${LOGAN_DIR_NAME} 
+mkdir ${ALIGNEMENT_DIR_NAME} 
+
+if [[ -n "$SESSION_ID" ]]; then
+    mkdir ${INPUT_DATA_DIR_NAME}
+    cd ${INPUT_DATA_DIR_NAME}
     ACCESSION_FILE="accessions_${SESSION_ID}.txt"
     if [ ! -f "$ACCESSION_FILE" ]; then
-        wget https://logan-search.org/api/download/${SESSION_ID} -O ${SESSION_ID}.zip
-
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Error: Failed to download https://logan-search.org/api/download/${SESSION_ID}.${NOCOLOR}"
-            echo -e "${RED}Check your internet connexion. ${NOCOLOR}"
-            exit 1
+        # check that ${SESSION_ID}.zip does not already exist
+        if [ -f "${SESSION_ID}.zip" ]; then
+            echo -e "${YELLOW}[INFO]Using existing local version of ${SESSION_ID}.zip...${NOCOLOR}"
+        else
+            echo -e "${YELLOW}[INFO]Downloading session data for session ID ${SESSION_ID}...${NOCOLOR}"
+            wget https://logan-search.org/api/download/${SESSION_ID} -O ${SESSION_ID}.zip
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}Error: Failed to download https://logan-search.org/api/download/${SESSION_ID}.${NOCOLOR}"
+                echo -e "${RED}Check your internet connexion. ${NOCOLOR}"
+                exit 1
+            fi
         fi
+
         unzip ${SESSION_ID}.zip session.json
         mv session.json ${SESSION_ID}.json
         jq -r '.. | ._metadata?.ID? // empty | .[]' ${SESSION_ID}.json > ${SESSION_ID}_acc.txt
@@ -139,8 +171,10 @@ if [[ -n "$SESSION_ID" ]]; then
         jq -r '.. | ._query?._name? // empty' ${SESSION_ID}.json >> ${QUERY_FILE}
         jq -r '.. | ._query?._seq? // empty' ${SESSION_ID}.json >> ${QUERY_FILE}
     fi
+    cd ..
+    ACCESSION_FILE="${INPUT_DATA_DIR_NAME}/${SESSION_ID}_acc.txt"
+    QUERY_FILE="${INPUT_DATA_DIR_NAME}/${SESSION_ID}_query.fa"
 fi
-
 if [[ -z "$ACCESSION_FILE" || -z "$QUERY_FILE" ]]; then
     echo -e "${RED}Error: --accessions and --query are required.${NOCOLOR}"
     print_help
@@ -149,6 +183,7 @@ fi
 
 if [ ! -f "$QUERY_FILE" ]; then
     echo -e "${RED}Error: Query file '$QUERY_FILE' does not exist.${NOCOLOR}"
+    rm -rf "$MAIN_DIR_NAME"
     exit 1
 fi
 
@@ -190,23 +225,23 @@ if [ "$UNITIGS" = true ]; then
 fi
 
 
-# QUERY_FILE base name without extension
-# Remove all extensions from QUERY_FILE to get the base name
-QUERY_BASENAME=$(basename "$QUERY_FILE")
-QUERY_BASENAME="${QUERY_BASENAME%%.*}"
+
+
+
+
 
 counter=0
 while read accession; do
     if [ "$LIMIT" -ne 0 ] && [ "$counter" -ge "$LIMIT" ]; then
-        echo -e "\n${YELLOW}Reached limit of $LIMIT accessions. Stopping further processing.${NOCOLOR}"
+        echo -e "\n${YELLOW}[INFO]Reached limit of $LIMIT accessions. Stopping further processing.${NOCOLOR}"
         break
     fi
     counter=$((counter + 1))
-    echo -e "\n\033[1;34m========================================${NOCOLOR}"
-    echo -e "\033[1;36m>>> Processing accession: ${accession} <<<${NOCOLOR}"
-    echo -e "\033[1;34m========================================${NOCOLOR}"
-	if [ ! -f "${accession}.${type}s.fa.zst" ]; then
-		echo -e "${YELLOW}Downloading ${accession}.${type}s.fa.zst...${NOCOLOR}"
+    echo -e "\n\033[1;34m==========================================${NOCOLOR}"
+    echo -e "${CYAN}>>> Processing accession: ${accession} <<<${NOCOLOR}"
+    echo -e "\033[1;34m==========================================${NOCOLOR}"
+	if [ ! -f "${LOGAN_DIR_NAME}/${accession}.${type}s.fa.zst" ]; then
+		echo -e "${YELLOW}[INFO]Downloading ${accession}.${type}s.fa.zst...${NOCOLOR}"
         if [ "$UNITIGS" = false ]; then
             wget https://s3.amazonaws.com/logan-pub/c/${accession}/${accession}.contigs.fa.zst 
             else 
@@ -220,45 +255,49 @@ while read accession; do
             fi
             continue
         fi
+        mv ${accession}.${type}s.fa.zst ${LOGAN_DIR_NAME}/
 	else
-		echo -e "${YELLOW}Using existing local version of ${accession}.${type}s.fa.zst...${NOCOLOR}"
+		echo -e "${YELLOW}[INFO] Using existing local version of ${LOGAN_DIR_NAME}/${accession}.${type}s.fa.zst...${NOCOLOR}"
 	fi
-	echo -e "${YELLOW}Recruiting sequences from ${accession}.${type}s.fa.zst with a match with ${QUERY_FILE}...${NOCOLOR}"
-	echo -e "${GREEN}back_to_sequences --kmer-size ${KMER_SIZE} --in-kmers ${QUERY_FILE} --in-sequences ${accession}.${type}s.fa.zst --out-sequences T.fa${NOCOLOR}"
-	back_to_sequences --kmer-size ${KMER_SIZE} --in-kmers ${QUERY_FILE} --in-sequences  ${accession}.${type}s.fa.zst --out-sequences ${accession}.recruited_${type}s.fa > /dev/null 2>&1
+	echo -e "${YELLOW}[INFO] Recruiting sequences from ${accession}.${type}s.fa.zst with a match with ${QUERY_FILE}...${NOCOLOR}"
+	echo -e "${GREEN}back_to_sequences --kmer-size ${KMER_SIZE} --in-kmers ${QUERY_FILE} --in-sequences ${LOGAN_DIR_NAME}/${accession}.${type}s.fa.zst --out-sequences ${LOGAN_DIR_NAME}/${accession}.recruited_${type}s.fa${NOCOLOR}"
+	back_to_sequences --kmer-size ${KMER_SIZE} --in-kmers ${QUERY_FILE} --in-sequences  ${LOGAN_DIR_NAME}/${accession}.${type}s.fa.zst --out-sequences ${LOGAN_DIR_NAME}/${accession}.recruited_${type}s.fa > /dev/null 2>&1
 
     ## check if any sequences were recruited
-    if [ ! -s "${accession}.recruited_${type}s.fa" ]; then
-        echo -e "${YELLOW}\tNo sequences were recruited from ${accession}.${type}s.fa.zst. Skipping BLAST step.${NOCOLOR}"
+    if [ ! -s "${LOGAN_DIR_NAME}/${accession}.recruited_${type}s.fa" ]; then
+        echo -e "${YELLOW}[INFO]\tNo sequences were recruited from ${accession}.${type}s.fa.zst. Skipping BLAST step.${NOCOLOR}"
         if [ "$DELETE" = true ]; then
-            echo -e "${YELLOW}Deleting ${accession}.recruited_${type}s.fa and ${accession}.${type}s.fa.zst...${NOCOLOR}"
-            rm -f ${accession}.recruited_${type}s.fa
-            rm -f ${accession}.${type}s.fa.zst
+            echo -e "${YELLOW}[INFO] Deleting ${accession}.recruited_${type}s.fa and ${accession}.${type}s.fa.zst...${NOCOLOR}"
+            rm -f ${LOGAN_DIR_NAME}/${accession}.recruited_${type}s.fa
+            rm -f ${LOGAN_DIR_NAME}/${accession}.${type}s.fa.zst
         fi
         continue
     fi
 
-	echo -e "${YELLOW}Aligning recruited sequences from ${accession}.${type}s.fa.zst with ${QUERY_FILE}...${NOCOLOR}"
-    run_blast "$QUERY_FILE" "${accession}.recruited_${type}s.fa"
+	echo -e "${YELLOW}[INFO] Aligning recruited sequences from ${accession}.${type}s.fa.zst with ${QUERY_FILE}...${NOCOLOR}"
+    echo run_blast "$QUERY_FILE" "${accession}.recruited_${type}s.fa"
+    run_blast "$QUERY_FILE" "${LOGAN_DIR_NAME}/${accession}.recruited_${type}s.fa"
     if [ "$DELETE" = true ]; then
-        echo -e "${YELLOW}Deleting ${accession}.recruited_${type}s.fa and ${accession}.${type}s.fa.zst...${NOCOLOR}"
-        rm -f ${accession}.recruited_${type}s.fa
-        rm -f ${accession}.${type}s.fa.zst
+        echo -e "${YELLOW}[INFO] Deleting ${accession}.recruited_${type}s.fa and ${accession}.${type}s.fa.zst...${NOCOLOR}"
+        rm -f ${LOGAN_DIR_NAME}/${accession}.recruited_${type}s.fa
+        rm -f ${LOGAN_DIR_NAME}/${accession}.${type}s.fa.zst
     fi
     # Clean the blast db files
-    rm -f ${accession}.recruited_${type}s_vs_${QUERY_BASENAME}/targets_db*
+    # rm -f ${accession}.recruited_${type}s_vs_${QUERY_BASENAME}/targets_db*
 done < ${ACCESSION_FILE}
 
 echo
 
     echo -e "\n${BLUE}================"
-    echo -e "${BLUE}>>> All done <<<"
+    echo -e "${CYAN}>>> All done <<<"
     echo -e "${BLUE}================\n"
 # if --delete was not used, show user how to remove all intermediate files
 if [ "$DELETE" = false ]; then
-    echo -e "${YELLOW}You  did not use --delete option. So you can manually remove all intermediate files (recruited ${type}s and ${type}s files) by running:${NOCOLOR}"
-    echo -e "${GREEN}rm -f *.recruited_${type}s.fa *.${type}s.fa.zst${NOCOLOR}"
+    echo -e "${YELLOW}[INFO] You  did not use --delete option. So you can manually remove all intermediate files (recruited ${type}s and ${type}s files) by running:${NOCOLOR}"
+    echo -e "rm -rf ${MAIN_DIR_NAME}/${LOGAN_DIR_NAME}"
 fi
 
+cd ..
+
 echo
-echo -e "${YELLOW}Results can be found in directories <accessions>.recruited_${type}s_vs_${QUERY_BASENAME} for each accession id in the ${ACCESSION_FILE}.${NOCOLOR}"
+echo -e "${YELLOW}[INFO] Results can be found in directory ${CYAN}${MAIN_DIR_NAME}${NOCOLOR}"
