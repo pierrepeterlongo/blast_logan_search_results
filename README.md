@@ -38,7 +38,7 @@ In any case, for each accession, it will run local blast between the query and t
 
 ## Example running from session.
 ```bash
-bash logan_blast_from_session.sh -s kmviz-b2bce461-ca13-4a45-b0b4-6c894eacf103
+./logan_blast_from_session.sh -s kmviz-b2bce461-ca13-4a45-b0b4-6c894eacf103
 ```
 
 ## Example running from accessions and query files.
@@ -53,5 +53,5 @@ tail -n +2 kmviz-c21feaeb-4f33-4abc-b119-7db7bd47069b/query.tsv | awk '{print $1
 ### Running from query and accessions files
 
 ```bash
-sh ./logan_blast.sh  -a example/accessions.txt -q example/query.fa
+./logan_blast.sh  -a example/accessions.txt -q example/query.fa
 ```
