@@ -110,6 +110,14 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# check that either session ID is provided or both accession and query files are provided
+if [[ -z "$SESSION_ID" && ( -z "$ACCESSION_FILE" || -z "$QUERY_FILE" ) ]]; then
+    echo -e "${RED}Error: You must provide either --session (-s) or both --accessions (-a) and --query (-q).${NOCOLOR}"
+    print_help
+    exit 1
+fi
+
 # If session option was provided, do not allow accessions or query options
 if [[ -n "$SESSION_ID" && ( -n "$ACCESSION_FILE" || -n "$QUERY_FILE" ) ]]; then
     echo -e "${RED}Error: --session (-s) cannot be combined with --accessions (-a) or --query (-q).${NOCOLOR}"
