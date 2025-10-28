@@ -1,27 +1,27 @@
-# Blast Logan-Search results against query
+# logan_blaster: Blast a query against Logan data
 
-![image](./assets/blast_logan_search_results.png)
+Align genomic sequences with [Logan](https://github.com/IndexThePlanet/Logan/) contigs.
+
+## Two main modes
+1. From a query and a list of Logan accessions.  
+2. From a [Logan-Search](https://logan-search.org/) session id. The query and Logan accessions are then automaticaly retreived.
+
+In any case, for each accession, `logan_blaster` 
+1. Dowloads the Logan contigs,
+2. Recruits contigs that contain at least one shared k-mer (k=17 by default) with the query (uses `[back_to_sequences](https://github.com/pierrepeterlongo/back_to_sequences)`), 
+3. Runs a local blast between the query and this subset of contigs.
 
 
-Given a query (fasta sequence), and a file containing list of SRA accessions (provided or not by Logan-Search results), run a local blast between the query and the subset of contigs or unitigs containing at least one shared k-mer with the query.
-
-The `logan_blast.sh` script can be used 
-- to directly retrieve the accessions from a Logan-Search session id, create the associated query file, and perform all alignements.
-- or to provide a query file and an accessions file (accessions.txt) directly.
-
-In any case, for each accession, it will run local blast between the query and the subset of contigs or unitigs containing at least one shared k-mer (k=17 by default) with the query (uses `back_to_sequences`), and save the results in a directory named `<accessions>.recruited_[contigs/unitigs]_vs_query`.
-
-
-## Installation 
+## Requires 
 - blast: *on mac* `brew install blast` or look at [blast installation web page](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/)
-- back_to_sequences: see [back_to_sequences installation web page](https://b2s-doc.readthedocs.io/en/latest/usage.html#installation])
+- back_to_sequences: see back_to_sequences installation [web page](https://b2s-doc.readthedocs.io/en/latest/usage.html#installation])
 - jq: see [jq installation web page](https://jqlang.org/)
 
-## Running the `logan_blast.sh` script
+## Running the `logan_blaster.sh` script
 
 ```bash
-./logan_blast.sh
-  Usage: ./logan_blast.sh --session <logan seesion ID> or (--query <query_file.fa> --accessions <accessions.txt>) [--delete] [--kmer-size <k>] [--limit <n>]
+./logan_blaster.sh
+  Usage: ./logan_blaster.sh --session <logan seesion ID> or (--query <query_file.fa> --accessions <accessions.txt>) [--delete] [--kmer-size <k>] [--limit <n>]
   Options:
   Input choice1: session ID
     -s, --session     Logan session ID, eg. kmviz-b2bce461-ca13-4a45-b0b4-6c894eacf103
@@ -38,20 +38,16 @@ In any case, for each accession, it will run local blast between the query and t
 
 ## Example running from session.
 ```bash
-./logan_blast_from_session.sh -s kmviz-b2bce461-ca13-4a45-b0b4-6c894eacf103
+./logan_blaster.sh -s kmviz-b2bce461-ca13-4a45-b0b4-6c894eacf103
 ```
 
 ## Example running from accessions and query files.
-This usage enables to select specific accessions to process, also ordering them, and to provide a custom query file.
-### Creating accessions.txt
-Logan-Search results can be used to create accessions.txt. Given a logan search result link or after exporting a table from Logan_search interface:
+This usage enables to select specific accessions to process, also ordering them, and to provide any custom query file.
 
 ```bash
-tail -n +2 kmviz-c21feaeb-4f33-4abc-b119-7db7bd47069b/query.tsv | awk '{print $1}' | tr -d "\"" > accessions.txt
+./logan_blaster.sh  -a example/accessions.txt -q example/query.fa
 ```
 
-### Running from query and accessions files
-
-```bash
-./logan_blast.sh  -a example/accessions.txt -q example/query.fa
-```
+## Authors
+- [Pierre Peterlongo](https://people.rennes.inria.fr/Pierre.Peterlongo/)
+- [Téo Lemane](https://tlemane.github.io/)
